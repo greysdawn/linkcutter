@@ -91,13 +91,11 @@ app.get("/",async (req,res)=>{
 		var user = JSON.parse(req.cookies.user);
 		var valid = await isValidUser(user.name, user.pass);
 		if(!valid) {
-			console.log(req.cookies.user);
 			res.sendFile(path.resolve("pages/login.html"));
 		} else {
 			res.sendFile(path.resolve("pages/index.html"));
 		}
 	} else {
-		console.log(req.cookies.user);
 		res.sendFile(path.resolve("pages/login.html"));
 	}
 })
