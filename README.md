@@ -1,2 +1,2 @@
-# link-shortener
+# linkcutter
 Simple link shortener for personal use
