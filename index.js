@@ -97,6 +97,7 @@ app.get("/",async (req,res)=>{
 			res.sendFile(path.resolve("pages/index.html"));
 		}
 	} else {
+		console.log(req.cookies.user);
 		res.sendFile(path.resolve("pages/login.html"));
 	}
 })
