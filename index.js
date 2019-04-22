@@ -219,7 +219,7 @@ app.post("/login",async (req,res)=>{
 		res.send("ERR: INVALID LOGIN.")
 		return;
 	}
-	res.cookie('user', JSON.stringify({name: req.body.name, pass: req.body.pass}), {expires: new Date("1/1/2030")});
+	res.cookie('user', JSON.stringify({name: req.body.name, pass: req.body.pass}), {expires: new Date("1/1/2030"), domain: ".greys.tk"});
 	res.redirect('/');
 })
 
