@@ -1,0 +1,35 @@
+<head>
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<link rel="stylesheet" href="/styles/main.css" />
+</head>
+<body>
+	<div class="container">
+	<%if(logged_in){%>
+		<div class="link">
+			<form action="link" method="post">
+				ADD
+				<input type="text" name="link" placeholder="link"/>
+				<input type="text" name="linkname" placeholder="name" />
+				<button type="submit">submit</button>
+			</form>
+		</div>
+		<% links.forEach(link => { %>
+				<div class = "link">
+					<a href=<%=""+link.link %>><%=link.name%></a>
+					<form action="/unlink" method="post">
+					<input type="hidden" name="link" value=<%=""+link.id%> />
+					<button type="submit">delete</button>
+					</form>
+				</div>
+		<% }) %>
+	<%} else {%>
+		<form action="/login" method="post">
+			<input type="text" name="name" placeholder="username"/>
+			<br/>
+			<input type="password" name="pass" placeholder="password"/>
+			<br/>
+			<button type="submit">log in</button>
+		</form>
+	<%}%>
+	</div>
+</body>

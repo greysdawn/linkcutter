@@ -15,6 +15,9 @@ const db	= mysql.createConnection({
 
 const app = express();
 
+app.set("view-engine","ejs");
+app.set("views","./pages");
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookparse());
@@ -33,8 +36,9 @@ const genCode = function(table,num) {
 
 async function setup() {
 	db.query(`CREATE TABLE IF NOT EXISTS links(
-		id					VARCHAR(8) PRIMARY KEY,
-		link 				TEXT NOT NULL
+		id		VARCHAR(8) PRIMARY KEY,
+		link 	TEXT NOT NULL,
+		name 	TEXT
 	)`)
 }
 
@@ -54,94 +58,73 @@ async function isValidUser(user, pass) {
 	})
 }
 
-async function linkExists(link) {
+async function getLink(link) {
 	return new Promise((res,rej)=>{
 		db.query(`SELECT * FROM links WHERE link=?`,[link],(err,rows)=>{
 			if(err) {
 				console.log(err);
-				res([false]);
+				res(undefined);
 			}
 			if(rows[0]) {
-				res([true,rows[0]]);
+				res(rows[0]);
 			} else {
-				res([false]);
+				res(undefined);
 			}
 		})
 	})
 }
 
-async function linkExistsID(id) {
+async function getLinkID(id) {
 	return new Promise((res,rej)=>{
 		db.query(`SELECT * FROM links WHERE id=?`,[id],(err,rows)=>{
 			if(err) {
 				console.log(err);
-				res([false]);
+				res(undefined);
 			}
 			if(rows[0]) {
-				res([true,rows[0]]);
+				res(rows[0]);
 			} else {
-				res([false]);
+				res(undefined);
+			}
+		})
+	})
+}
+
+function getLinks() {
+	return new Promise((res)=>{
+		db.query(`SELECT * FROM links`,(err,rows)=>{
+			if(err) {
+				console.log(err);
+				res("ERR")
+			} else {
+				res(rows);
 			}
 		})
 	})
 }
 
 app.get("/",async (req,res)=>{
+	var logged;
+	var links = [];
 	if(req.cookies.user) {
 		var user = JSON.parse(req.cookies.user);
-		var valid = await isValidUser(user.name, user.pass);
-		if(!valid) {
-			res.sendFile(path.resolve("pages/login.html"));
-		} else {
-			res.sendFile(path.resolve("pages/index.html"));
+		logged = await isValidUser(user.name, user.pass);
+		if(logged) {
+			links = await getLinks();
 		}
 	} else {
-		res.sendFile(path.resolve("pages/login.html"));
+		logged = false;
 	}
-})
-
-app.get("/add",(req,res)=>{
-	res.sendFile(path.resolve("pages/add.html"));
-})
-
-app.get("/del",(req,res)=>{
-	res.sendFile(path.resolve("pages/delete.html"));
-})
-
-app.get("/list",async (req,res)=>{
-	if(req.cookies.user) {
-		var user = JSON.parse(req.cookies.user);
-		var valid = await isValidUser(user.name, user.pass);
-		if(!valid) {
-			res.sendFile(path.resolve("pages/list.html"));
-		} else {
-			db.query(`SELECT * FROM links`,(err,rows)=>{
-				if(err) {
-					console.log(err);
-					res.send("ERR")
-				} else {
-					res.send(rows.map(l => {
-						return {id: l.id, link: l.link}
-					}));
-				}
-			})
-		}
-	} else {
-		res.sendFile(path.resolve("pages/login.html"));
-	}
+	res.render("index.ejs",{logged_in: logged, links: links});
 })
 
 app.get("/:id",async (req,res)=>{
-	db.query(`SELECT * FROM links WHERE id=?`,[req.params.id],(err,rows)=>{
-		if(err) {
-			console.log(err);
-			res.send("There was an error.");
-		} else if(!rows[0]) {
-			res.send(`Link \'${req.params.id}\' not found.`)
-		} else {
-			res.redirect(rows[0].link);
-		}
-	})
+	var link = await getLinkID(req.params.id);
+	if(link) {
+		res.redirect(link.link);
+	} else {
+		res.send("ERR: NOT FOUND");
+	}
 })
 
 app.post("/link",async (req,res)=>{
@@ -153,13 +136,13 @@ app.post("/link",async (req,res)=>{
 		res.send("ERR: INVALID LOGIN.")
 		return;
 	}
-	var exists = await linkExists(req.body.link);
-	if(exists[0]){
-		res.send({status: "EXISTS", link: "https://greys.tk/"+exists[1].id});
+	var exists = await getLink(req.body.link);
+	if(exists){
+		res.send({status: "EXISTS", link: "https://greys.tk/"+exists.id});
 		return;
 	}
 	var code = genCode(process.env.CHARACTERS);
-	db.query(`INSERT INTO links SET ?`,{id: code, link: req.body.link},(err,rows)=>{
+	db.query(`INSERT INTO links SET ?`,{id: code, link: req.body.link, name: req.body.linkname},(err,rows)=>{
 		if(err) {
 			console.log(err);
 			res.send("ERR")
@@ -178,8 +161,8 @@ app.post("/unlink",async (req,res)=>{
 		res.send("ERR: INVALID LOGIN.")
 		return;
 	}
-	var exists = await linkExistsID(req.body.link);
-	if(!exists[0]){
+	var exists = await getLinkID(req.body.link);
+	if(!exists){
 		res.send({status: "DOES NOT EXIST"});
 		return;
 	}
@@ -195,22 +178,17 @@ app.post("/unlink",async (req,res)=>{
 
 app.post("/links",async (req,res)=>{
 	var user;
+	var links;
 	if(req.cookies.user) user = JSON.parse(req.cookies.user);
 	else user = {name: req.body.name, pass: req.body.pass}
-	var valid = await isValidUser(user.name, user.pass);	if(!valid) {
+	var valid = await isValidUser(user.name, user.pass);
+	if(!valid) {
 		res.send("ERR: INVALID LOGIN.")
 		return;
+	} else {
+		links = await getLinks();
+		res.send(links);
 	}
-	db.query(`SELECT * FROM links`,(err,rows)=>{
-		if(err) {
-			console.log(err);
-			res.send("ERR")
-		} else {
-			res.send(rows.map(l => {
-				return {id: l.id, link: l.link}
-			}));
-		}
-	})
 })
 
 app.post("/login",async (req,res)=>{
@@ -219,7 +197,7 @@ app.post("/login",async (req,res)=>{
 		res.send("ERR: INVALID LOGIN.")
 		return;
 	}
-	res.cookie('user', JSON.stringify({name: req.body.name, pass: req.body.pass}), {expires: new Date("1/1/2030"), domain: ".greys.tk"});
+	res.cookie('user', JSON.stringify({name: req.body.name, pass: req.body.pass}), {expires: new Date("1/1/2030")});
 	res.redirect('/');
 })
 
