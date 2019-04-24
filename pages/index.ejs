@@ -14,7 +14,7 @@
 		</div>
 		<% links.forEach(link => { %>
 				<div class = "link">
-					<a href=<%=""+link.link %>><%=link.name%></a>
+					<a href=<%="https://greys.tk/"+link.id %>><%=link.name%></a>
 					<form action="/unlink" method="post">
 					<input type="hidden" name="link" value=<%=""+link.id%> />
 					<button type="submit">delete</button>
