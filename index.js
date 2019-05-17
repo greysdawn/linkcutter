@@ -21,6 +21,7 @@ app.set("views","./pages");
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookparse());
+app.use(userAuth);
 
 app.use(express.static(__dirname + '/public'));
 
@@ -42,19 +43,19 @@ async function setup() {
 	)`)
 }
 
-async function isValidUser(user, pass) {
-	return new Promise((res,rej)=>{
-		db.query(`SELECT * FROM users WHERE name=? AND password=?`,[user,pass],(err,rows)=>{
-			if(err) {
-				console.log(err);
-				res(false);
-			}
-			if(rows[0]) {
-				res(true);
-			} else {
-				res(false);
-			}
-		})
+function userAuth(req, res, next) {
+	var user = (req.cookies.user ? JSON.parse(req.cookies.user) : {username: req.body.username, pass: req.body.pass});
+	db.query(`SELECT * FROM users WHERE name=? AND password=?`,[user.username, user.pass],(err,rows)=>{
+		if(err) {
+			console.log(err);
+			req.verified = false;
+		}
+		if(rows[0]) {
+			req.verified = true;
+		} else {
+			req.verified = false;
+		}
+		next()
 	})
 }
 
@@ -103,19 +104,64 @@ function getLinks() {
 	})
 }
 
+function createLink(link, name, id) {
+	var exists;
+	return new Promise(async (res)=>{
+		exists = await getLink(link);
+		if(exists) {
+			return res({status:'EXISTS', link: 'https://greys.tk/'+exists.id});
+		} else if(id) {
+			exists = await getLinkID(id);
+			if(exists) {
+				res({status:'EXISTS', link: 'https://greys.tk/'+exists.id});
+			} else {
+				db.query(`INSERT INTO links SET ?`,{id: id, link: link, name: name},(err,rows)=>{
+					if(err) {
+						console.log(err);
+						res.send("ERR")
+					} else {
+						res({status: "OK", link: "https://greys.tk/"+id});
+					}
+				})
+			}
+		} else {
+			var code = genCode(process.env.CHARACTERS);
+			db.query(`INSERT INTO links SET ?`,{id: code, link: link, name: name},(err,rows)=>{
+				if(err) {
+					console.log(err);
+					res.send("ERR")
+				} else {
+					res({status: "OK", link: "https://greys.tk/"+code});
+				}
+			})
+		}
+	})
+}
+
+function deleteLink(id) {
+	var exists;
+	return new Promise(async (res)=>{
+		exists = await getLinkID(id);
+		if(exists) {
+			db.query(`DELETE FROM links WHERE id=?`,[id],(err,rows)=>{
+				if(err) {
+					console.log(err);
+					res({status: "ERR"})
+				} else {
+					res({status: "OK"});
+				}
+			})
+		} else {
+			return res({status:'DOES NOT EXIST'});
+		}
+	})
+}
+
 app.get("/",async (req,res)=>{
 	var logged;
 	var links = [];
-	if(req.cookies.user) {
-		var user = JSON.parse(req.cookies.user);
-		logged = await isValidUser(user.name, user.pass);
-		if(logged) {
-			links = await getLinks();
-		}
-	} else {
-		logged = false;
-	}
-	res.render("index.ejs",{logged_in: logged, links: links});
+	links = await getLinks();
+	res.render("index.ejs",{logged_in: req.verified, links: links});
 })
 
 app.get("/:id",async (req,res)=>{
@@ -123,82 +169,38 @@ app.get("/:id",async (req,res)=>{
 	if(link) {
 		res.redirect(link.link);
 	} else {
-		res.send("ERR: NOT FOUND");
+		res.send({status: "NOT FOUND"});
 	}
 })
 
 app.post("/link",async (req,res)=>{
-	var user;
-	if(req.cookies.user) user = JSON.parse(req.cookies.user);
-	else user = {name: req.body.name, pass: req.body.pass}
-	var valid = await isValidUser(user.name, user.pass);
-	if(!valid) {
-		res.send("ERR: INVALID LOGIN.")
-		return;
-	}
-	var exists = await getLink(req.body.link);
-	if(exists){
-		res.send({status: "EXISTS", link: "https://greys.tk/"+exists.id});
-		return;
-	}
-	var code = genCode(process.env.CHARACTERS);
-	db.query(`INSERT INTO links SET ?`,{id: code, link: req.body.link, name: req.body.linkname},(err,rows)=>{
-		if(err) {
-			console.log(err);
-			res.send("ERR")
-		} else {
-			res.send({status: "OK", link: "https://greys.tk/"+code});
-		}
-	})
+	if(!req.verified) return res.send({status: "INVALID LOGIN."});
+	var dat = await createLink(req.body.link, req.body.name, req.body.id || undefined);
+	res.send(dat);
 })
 
 app.post("/unlink",async (req,res)=>{
-	var user;
-	if(req.cookies.user) user = JSON.parse(req.cookies.user);
-	else user = {name: req.body.name, pass: req.body.pass}
-	var valid = await isValidUser(user.name, user.pass);
-	if(!valid) {
-		res.send("ERR: INVALID LOGIN.")
-		return;
-	}
-	var exists = await getLinkID(req.body.link);
-	if(!exists){
-		res.send({status: "DOES NOT EXIST"});
-		return;
-	}
-	db.query(`DELETE FROM links WHERE id=?`,[req.body.link],(err,rows)=>{
-		if(err) {
-			console.log(err);
-			res.send("ERR")
-		} else {
-			res.send({status: "OK"});
-		}
-	})
+	if(!req.verified) return res.send({status: "INVALID LOGIN."});
+	var dat = await deleteLink(req.body.link);
+	res.send(dat);
 })
 
 app.post("/links",async (req,res)=>{
-	var user;
-	var links;
-	if(req.cookies.user) user = JSON.parse(req.cookies.user);
-	else user = {name: req.body.name, pass: req.body.pass}
-	var valid = await isValidUser(user.name, user.pass);
-	if(!valid) {
-		res.send("ERR: INVALID LOGIN.")
-		return;
+	if(!req.verified) {
+		return res.send({status: "INVALID LOGIN."});
 	} else {
 		links = await getLinks();
 		res.send(links);
 	}
 })
 
-app.post("/login",async (req,res)=>{
-	var valid = await isValidUser(req.body.name, req.body.pass);
-	if(!valid) {
-		res.send("ERR: INVALID LOGIN.")
+app.post("/login", async (req,res)=>{
+	if(!req.verified) {
+		res.send({status: "INVALID LOGIN."})
 		return;
 	}
-	res.cookie('user', JSON.stringify({name: req.body.name, pass: req.body.pass}), {expires: new Date("1/1/2030")});
-	res.redirect('/');
+	res.cookie('user', JSON.stringify({username: req.body.username, pass: req.body.pass}), {expires: new Date("1/1/2030")});
+	res.send({status: 'OK'});
 })
 
 setup();

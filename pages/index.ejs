@@ -8,7 +8,8 @@
 		<div class="link">
 			<form action="link" method="post">
 				<input type="text" name="link" placeholder="link"/>
-				<input type="text" name="linkname" placeholder="name" />
+				<input type="text" name="name" placeholder="name" />
+				<input type="text" name="id" placeholder="custom id" />
 				<button type="submit">submit</button>
 			</form>
 		</div>
@@ -23,7 +24,7 @@
 		<% }) %>
 	<%} else {%>
 		<form action="/login" method="post">
-			<input type="text" name="name" placeholder="username"/>
+			<input type="text" name="username" placeholder="username"/>
 			<br/>
 			<input type="password" name="pass" placeholder="password"/>
 			<br/>
